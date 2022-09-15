@@ -16,65 +16,72 @@ const rad_in_deg = math.pi / 180.0;
 const deg_in_rad = 180.0 / math.pi;
 // Configuration variables.
 const enable_vsync = true;
-const boid_count: usize = 120;
+const boid_count: usize = 220;
 const window_width: comptime_int = 1200;
 const window_height: comptime_int = 800;
 var rnd = rng.init(0);
 var rand = rnd.random();
 
 /// Basic 2D vector algebra.
-const Vec2 = struct {
+const Vec2 = packed struct {
     x: f32,
     y: f32,
 
-    fn cartesian(x: f32, y: f32) @This() {
+    inline fn fromSimd(other: std.meta.Vector(2, f32)) @This() {
+        return @bitCast(@This(), other);
+    }
+    inline fn toSimd(self: @This()) std.meta.Vector(2, f32) {
+        return @bitCast(std.meta.Vector(2, f32), self);
+    }
+    inline fn cartesian(x: f32, y: f32) @This() {
         return @This(){ .x = x, .y = y };
     }
-
-    fn polar(r: f32, theta: f32) @This() {
+    inline fn polar(r: f32, theta: f32) @This() {
         return @This(){ .x = r * @cos(theta), .y = r * @sin(theta) };
     }
-
-    fn zero() @This() {
+    inline fn zero() @This() {
         return @This(){ .x = 0, .y = 0 };
     }
 
-    fn mod(self: @This(), modulus: @This()) @This() {
-        return @This(){ .x = @mod(self.x, modulus.x), .y = @mod(self.y, modulus.y) };
+    inline fn mod(self: @This(), modulus: @This()) @This() {
+        return fromSimd(@mod(self.toSimd(), modulus.toSimd()));
     }
-    fn add(self: @This(), other: @This()) @This() {
-        return @This(){ .x = self.x + other.x, .y = self.y + other.y };
+    inline fn add(self: @This(), other: @This()) @This() {
+        return fromSimd(self.toSimd() + other.toSimd());
     }
-    fn sub(self: @This(), other: @This()) @This() {
-        return @This(){ .x = self.x - other.x, .y = self.y - other.y };
+    inline fn sub(self: @This(), other: @This()) @This() {
+        return fromSimd(self.toSimd() - other.toSimd());
     }
-    fn scale(self: @This(), scalar: f32) @This() {
-        return @This(){ .x = self.x * scalar, .y = self.y * scalar };
+    inline fn mul(self: @This(), other: @This()) @This() {
+        return fromSimd(self.toSimd() * other.toSimd());
     }
-    fn normalize(self: @This()) @This() {
+    inline fn scale(self: @This(), scalar: f32) @This() {
+        return fromSimd(@splat(2, scalar) * self.toSimd());
+    }
+    inline fn normalize(self: @This()) @This() {
         return self.scale(1.0 / self.norm());
     }
 
-    fn dot(self: @This(), other: @This()) f32 {
-        return self.x * other.x + self.y * other.y;
+    inline fn dot(self: @This(), other: @This()) f32 {
+        return @reduce(.Add, self.toSimd() * other.toSimd());
     }
-    fn quadrature(self: @This()) f32 {
+    inline fn quadrature(self: @This()) f32 {
         return self.dot(self);
     }
-    fn norm(self: @This()) f32 {
+    inline fn norm(self: @This()) f32 {
         return math.sqrt(self.quadrature());
     }
-    fn angle(self: @This()) f32 {
+    inline fn angle(self: @This()) f32 {
         return math.atan2(f32, self.y, self.x);
     }
 
-    fn isWithinRadius(self: @This(), r_squared: f32) bool {
-        return self.x * self.x + self.y * self.y <= r_squared;
+    inline fn isWithinRadius(self: @This(), r_squared: f32) bool {
+        return self.quadrature() <= r_squared;
     }
-    fn isWithinCircle(self: @This(), centre: @This(), r_squared: f32) bool {
+    inline fn isWithinCircle(self: @This(), centre: @This(), r_squared: f32) bool {
         return self.sub(centre).isWithinCircle(r_squared);
     }
-    fn isClockwiseOf(self: @This(), other: @This()) bool {
+    inline fn isClockwiseOf(self: @This(), other: @This()) bool {
         return self.x * other.y - self.y * other.x > 0;
     }
     fn isWithinSector(self: @This(), centre: @This(), start_rad: f32, end_rad: f32, r_squared: f32) bool {
@@ -101,8 +108,12 @@ const Boid = struct {
     // Boid configuration variables.
     const fov: f32 = 250 * rad_in_deg;
     const sight: f32 = 120;
-    const separation_force = 1.45;
+    const separation_force = 0.95;
+    const alignment_force = 0.61;
+    const cohesion_force = 0.76;
+    const force_limit = 0.01;
     const minimum_velocity = 0.65;
+    const maximum_velocity = 1.25;
     const fill = nano.rgbaf(0.7, 0.9, 0.8, 0.8);
     const stroke = nano.rgbaf(0.8, 0.9, 1.0, 0.5);
     const focused_color = nano.rgbaf(1.0, 0.8, 0.9, 1.0);
@@ -125,7 +136,7 @@ const Boid = struct {
         var accel = Vec2.zero();
         while (neighbours.next()) |neighbour| {
             const sep = self.position.sub(neighbour.position);
-            accel = accel.add(sep.scale(1 / sep.quadrature()));
+            accel = accel.add(sep.scale((sight / 2) / sep.quadrature()));
             count += 1;
         }
         if (count == 0) return accel;
@@ -134,19 +145,30 @@ const Boid = struct {
 
     fn alignment(self: Self, neighbours: *Boids.NeighbourIterator) Vec2 {
         _ = self;
-        _ = neighbours;
-        return Vec2.zero();
+        var count: f32 = 0;
+        var accel = Vec2.zero();
+        while (neighbours.next()) |neighbour| {
+            accel = accel.add(neighbour.velocity);
+            count += 1;
+        }
+        if (count == 0) return accel;
+        return accel.normalize().scale(alignment_force);
     }
 
     fn cohesion(self: Self, neighbours: *Boids.NeighbourIterator) Vec2 {
         _ = self;
-        _ = neighbours;
-        return Vec2.zero();
+        var count: f32 = 0;
+        var centre = Vec2.zero();
+        while (neighbours.next()) |neighbour| {
+            centre = centre.add(neighbour.position);
+            count += 1;
+        }
+        if (count == 0) return Vec2.zero();
+        centre = centre.scale(1 / count);
+        const accel = centre.sub(self.position);
+        return accel.normalize().scale(cohesion_force);
     }
 };
-
-// FIXME: remove, temporary hack.
-var frames: u32 = 0;
 
 /// Manage the flock of boids.
 const Boids = struct {
@@ -156,7 +178,7 @@ const Boids = struct {
     focused_boid: usize = 0,
     flock: std.MultiArrayList(Boid),
     /// Any given boid's neighbours' indices is a slice into this fixed array.
-    neighbour_indices: [max_neighbours]usize = [_]usize{0} ** max_neighbours,
+    neighbour_indices: [max_neighbours]usize = undefined,
 
     /// Move flock based on their velocities.
     fn move(self: *@This(), bounds: Vec2) void {
@@ -175,16 +197,28 @@ const Boids = struct {
         for (self.flock.items(.velocity)) |*velocity| {
             const boid = self.flock.get(i);
             var neighbours = self.neighbourIterator(i);
+            // Do separation.
             const sep = boid.separation(&neighbours);
             neighbours.reset();
+            // Do alignment.
             const alg = boid.alignment(&neighbours);
             neighbours.reset();
+            // Do cohesion.
             const coh = boid.cohesion(&neighbours);
             neighbours.reset();
-            const acceleration = sep.add(alg).add(coh);
+            // Sum to resultant acceleration from each three rules
+            // then simply add the acceleration vectors to the
+            // velocity vector (low effort Euler integration).
+            var acceleration = sep.add(alg).add(coh).scale(1.0 / 3.0);
+            if (acceleration.quadrature() > Boid.force_limit * Boid.force_limit)
+                acceleration = acceleration.normalize().scale(Boid.force_limit);
             velocity.* = velocity.add(acceleration);
+            // Sometimes boids can slow down to a halt, so bottom out
+            // at a predefined minimum velocity.
             if (velocity.quadrature() < Boid.minimum_velocity * Boid.minimum_velocity)
                 velocity.* = velocity.normalize().scale(Boid.minimum_velocity);
+            if (velocity.quadrature() > Boid.maximum_velocity * Boid.maximum_velocity)
+                velocity.* = velocity.normalize().scale(Boid.maximum_velocity);
             i += 1;
         }
         self.move(bounds);
@@ -197,25 +231,28 @@ const Boids = struct {
         var i: usize = 0;
         var neighbour_count: usize = 0;
         for (self.flock.items(.position)) |pos| {
-            if (i != index) {
-                const is_seen = pos.isWithinSector(
-                    boid.position,
-                    dir - Boid.fov / 2,
-                    dir + Boid.fov / 2,
-                    Boid.sight * Boid.sight,
-                );
-                if (is_seen) {
-                    self.neighbour_indices[neighbour_count] = i;
-                    neighbour_count += 1;
-                }
+            defer i += 1;
+            if (i == index) continue; // Ignore yourself as neighbour.
+            // Simply stop considering neighbours when there are too many.
+            if (neighbour_count >= max_neighbours) break;
+            const is_seen = pos.isWithinSector(
+                boid.position,
+                dir - Boid.fov / 2,
+                dir + Boid.fov / 2,
+                Boid.sight * Boid.sight,
+            );
+            if (is_seen) {
+                self.neighbour_indices[neighbour_count] = i;
+                neighbour_count += 1;
             }
-            i += 1;
         }
 
         return self.neighbour_indices[0..neighbour_count];
     }
 
-    const NeighbourIterator = struct {
+    /// Normal iterator for neighbour boids, stores a pointer into
+    /// the flock array, so can be used from anywhere.
+    pub const NeighbourIterator = struct {
         count: usize = 0,
         list: []usize,
         flock: *std.MultiArrayList(Boid),
@@ -231,6 +268,7 @@ const Boids = struct {
         }
     };
 
+    /// Generate iterator over boids which are neighbours to the boid at index i.
     fn neighbourIterator(self: *@This(), i: usize) NeighbourIterator {
         return NeighbourIterator{
             .count = 0,
@@ -469,6 +507,7 @@ fn loop(alloc: std.mem.Allocator, boids: *Boids) !void {
     glfw.setTime(0);
     var tick = glfw.getTime();
     // Main loop.
+    var frames: u32 = 0;
     while (!window.shouldClose()) : (frames += 1) {
         // Get frame time.
         const tock = glfw.getTime();

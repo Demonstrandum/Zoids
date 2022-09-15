@@ -19,3 +19,7 @@ git clone --recurse-submodules -j8 git://github.com/Demonstrandum/Zoids.git
 ```sh
 zig build run
 ```
+
+---
+
+![screenshot](https://user-images.githubusercontent.com/26842759/190493039-1252726f-c784-4390-bd3a-1e31fca325af.png)
