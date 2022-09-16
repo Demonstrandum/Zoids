@@ -11,7 +11,7 @@ You must have `glfw` and `nanovg` installed as system packages.
 Clone with
 
 ```sh
-git clone --recurse-submodules -j8 git://github.com/Demonstrandum/Zoids.git
+git clone --recurse-submodules -j8 https://github.com/Demonstrandum/Zoids.git
 ```
 
 ## Run

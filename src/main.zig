@@ -108,7 +108,7 @@ const Boid = struct {
     // Boid configuration variables.
     const fov: f32 = 250 * rad_in_deg;
     const sight: f32 = 120;
-    const separation_force = 0.95;
+    const separation_force = 1.55;
     const alignment_force = 0.61;
     const cohesion_force = 0.76;
     const force_limit = 0.01;
