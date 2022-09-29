@@ -4,6 +4,10 @@ Boids, in OpenGL+GLFW using NanoVG. Written in Zig.
 
 Just for trying out the language and tools.
 
+## WASM Web Version
+
+See the boids compiled to WASM online here: [demonstrandum.github.io/Zoids](https://demonstrandum.github.io/Zoids/).
+
 ## Dependencies
 
 You must have `glfw` and `nanovg` installed as system packages.
@@ -33,4 +37,4 @@ open http://localhost:8080/
 
 ---
 
-![screenshot](https://user-images.githubusercontent.com/26842759/190493039-1252726f-c784-4390-bd3a-1e31fca325af.png)
+![screenshot](https://user-images.githubusercontent.com/26842759/193130326-67c4fca0-057e-4643-9b23-f663def9cb73.png)

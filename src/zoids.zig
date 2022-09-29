@@ -106,6 +106,7 @@ pub const Boid = struct {
     const alignment_force = 0.61;
     const cohesion_force = 0.76;
     const force_limit = 0.01;
+    const jitter_force = 0.008;
     const minimum_velocity = 0.65;
     const maximum_velocity = 1.25;
     const fill = nano.rgbaf(0.7, 0.9, 0.8, 0.8);
@@ -225,6 +226,9 @@ pub const Boids = struct {
             if (acceleration.quadrature() > Boid.force_limit * Boid.force_limit)
                 acceleration = acceleration.normalize().scale(Boid.force_limit);
             velocity.* = velocity.add(acceleration);
+            // Add random jitter direction if no acceleration was applied at all.
+            if (acceleration.norm() < math.epsilon(f32))
+                velocity.* = velocity.add(Vec2.polar(Boid.jitter_force, 2 * math.pi * rand.float(f32)));
             // Sometimes boids can slow down to a halt, so bottom out
             // at a predefined minimum velocity.
             if (velocity.quadrature() < Boid.minimum_velocity * Boid.minimum_velocity)
