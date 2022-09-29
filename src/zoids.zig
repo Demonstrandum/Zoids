@@ -150,7 +150,6 @@ pub const Boid = struct {
     }
 
     fn cohesion(self: Self, neighbours: *Boids.NeighbourIterator) Vec2 {
-        _ = self;
         var count: f32 = 0;
         var centre = Vec2.zero();
         while (neighbours.next()) |neighbour| {
