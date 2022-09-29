@@ -1,27 +1,20 @@
-# Simple workflow for deploying static content to GitHub Pages
 name: Deploy static content to Pages
-
 on:
-  # Runs on pushes targeting the default branch
   push:
     branches: ["master"]
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow one concurrent deployment
 concurrency:
   group: "pages"
   cancel-in-progress: true
 
 jobs:
-  # Single deploy job since we're just deploying
   deploy:
     environment:
       name: github-pages
@@ -32,18 +25,25 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
-      - name: Setup Pages
-        uses: actions/configure-pages@v2
       - name: Install Zig
         run: |
-          apt-get install devel
-      - name: Build artifacts
+          ZIG_DIR="zig-linux-x86_64-0.10.0-dev.4197+9a2f17f9f"
+          ZIG_TAR="$ZIG_DIR.tar.xz"
+          ZIG_URL="https://ziglang.org/builds/$ZIG_TAR"
+          sudo rm -fr /var/lib/apt/lists
+          sudo mkdir /var/lib/apt/lists
+          sudo apt-get -yq update --fix-missing
+          sudo apt-get -yq install build-essential lsb-release software-properties-common wget clang cmake xz-utils
+          wget "$ZIG_URL" -O "$ZIG_TAR"
+          tar xf "$ZIG_TAR"
+      - name: Build artifact (website)
         run: |
-          zig build website -Dtarget=wasm32-freestanding
+          "$ZIG_DIR"/zig build website -Dtarget=wasm32-freestanding
+      - name: Setup Pages
+        uses: actions/configure-pages@v2
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          # Upload entire repository
           path: './deployment'
       - name: Deploy to GitHub Pages
         id: deployment

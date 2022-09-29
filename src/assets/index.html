@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Zoids!</title>
+		<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+main {
+	width: 100vw;
+	height: 100vh;
+	margin: 0; padding: 0;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+#canvas {
+	border-radius: 2em;
+	border: 1px solid #0006;
+	filter: drop-shadow(0 5px 15px #0004);
+}
+		</style>
+	</head>
+	<body>
+		<noscript>JavaScript + WASM + WebGL needed to display.</noscript>
+		<main>
+			<canvas id="canvas">Zoids go here.</canvas>
+		</main>
+		<script>
+			const WIDTH_SCALE = 0.6;
+			const HEIGHT_SCALE = 0.75;
+			const canvas = document.getElementById('canvas');
+			window.$canvasgl = canvas;
+		</script>
+		<script src="wasm.js"></script>
+		<script src="webgl.js"></script>
+		<script>
+			const fetchAndInstantiate = async (url, imports) => {
+				const res = await fetch(url);
+				const buf = await res.arrayBuffer();
+				const instance = await WebAssembly.instantiate(buf, imports);
+				return instance.instance;
+			};
+		</script>
+		<script>
+			const initializeCanvas = async () => {
+				const env = { ...wasm, ...webgl };
+				const instance = await fetchAndInstantiate('zoids.wasm', { env });
+				const { memory } = instance.exports;
+				window.memory = memory;
+				instance.exports.onInit();
+
+				const resize = () => {
+					const width = window.innerWidth * WIDTH_SCALE;
+					const height = window.innerHeight * HEIGHT_SCALE;
+					canvas.width = window.devicePixelRatio * width;
+					canvas.height = window.devicePixelRatio * height;
+					canvas.style.width = `${width}px`;
+					canvas.style.height = `${height}px`;
+					instance.exports.onResize(width, height, window.devicePixelRatio);
+					console.log(`resized to ${width}x${height}`);
+				};
+				window.addEventListener('resize', resize, false);
+				resize();
+
+				const { onAnimationFrame } = instance.exports;
+				document.addEventListener('keydown', e => instance.exports.onKeyDown(e.keyCode));
+				document.addEventListener('mousemove', e => instance.exports.onMouseMove(e.x, e.y));
+
+				const step = timestamp => {
+					onAnimationFrame(timestamp);
+					window.requestAnimationFrame(step);
+				};
+				// Start animation.
+				window.requestAnimationFrame(step);
+			};
+			initializeCanvas();
+		</script>
+	</body>
+</html>
