@@ -46,7 +46,7 @@ pub fn build(b: *std.build.Builder) !void {
         }
         // Add glfw package.
         exe.addPackage(glfw.pkg);
-        glfw.link(b, exe, .{});
+        try glfw.link(b, exe, .{});
     }
     // Add general packages.
     nanovg.addNanoVGPackage(exe);

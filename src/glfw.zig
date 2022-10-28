@@ -142,7 +142,7 @@ fn loop(alloc: std.mem.Allocator, boids: *Boids) !void {
     defer glfw.terminate();
     const window = try glfw.Window.create(zoids.window_width, zoids.window_height, "Zoids!", null, null, .{
         .context_version_major = 2,
-        .context_version_minor = 1,
+        .context_version_minor = 0,
         .opengl_forward_compat = false,
     });
     defer window.destroy();
